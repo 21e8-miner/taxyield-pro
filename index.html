@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TaxYield Pro — After-Tax Yield Dashboard</title>
+<style>
+  :root {
+    --canvas: #0f172a;
+    --surface: #1e293b;
+    --surface-2: #334155;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --green: #4ade80;
+    --orange: #fbbf24;
+    --red: #f87171;
+    --purple: #a78bfa;
+    --border: #475569;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--canvas);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+  header { margin-bottom: 2rem; }
+  header h1 { font-size: 1.75rem; font-weight: 700; }
+  header p { color: var(--muted); font-size: 0.85rem; margin-top: 0.25rem; }
+  .controls { display: flex; gap: 1rem; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .control-group { display: flex; align-items: center; gap: 0.5rem; }
+  .control-group label { font-size: 0.8rem; color: var(--muted); min-width: 120px; }
+  input[type="range"] { width: 150px; accent-color: var(--accent); }
+  .state-value { font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.85rem; font-weight: 600; color: var(--accent); min-width: 40px; }
+  .mode-toggle { display: flex; background: var(--surface-2); border-radius: 6px; padding: 2px; flex-wrap: wrap; }
+  .mode-toggle button { background: none; border: none; padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.8rem; cursor: pointer; color: var(--muted); transition: all 0.2s; }
+  .mode-toggle button.active { background: var(--accent); color: var(--canvas); font-weight: 600; }
+  .export-btn { background: var(--accent); color: var(--canvas); border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+  .export-btn:hover { opacity: 0.8; }
+  .refresh-btn { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.8rem; cursor: pointer; transition: opacity 0.2s; }
+  .refresh-btn:hover { opacity: 0.8; }
+  .refresh-btn.loading { opacity: 0.5; }
+  .status-badge { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; color: var(--muted); }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+  .status-dot.stale { background: var(--orange); }
+  .status-dot.error { background: var(--red); }
+  .error-banner { background: rgba(229,57,51,0.15); border: 1px solid var(--red); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem; display: none; }
+  .error-banner.visible { display: block; }
+  .error-banner .error-text { color: var(--red); font-size: 0.85rem; }
+  .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; }
+  .chart-card h3 { font-size: 0.85rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+  .scatter-container { position: relative; width: 100%; height: 320px; }
+  .grid-line { position: absolute; left: 0; right: 0; border-top: 1px solid var(--border); }
+  .y-axis-line { position: absolute; top: 0; bottom: 0; left: 0; border-left: 1px solid var(--border); }
+  .x-axis-line { position: absolute; bottom: 0; left: 0; right: 0; border-bottom: 1px solid var(--border); }
+  .y-axis-label, .x-axis-label { font-size: 0.7rem; color: var(--muted); }
+  .scatter-point { position: absolute; width: 14px; height: 14px; border-radius: 50%; cursor: pointer; transform: translate(-50%, -50%); transition: transform 0.2s, opacity 0.2s; border: 2px solid transparent; }
+  .scatter-point:hover { transform: translate(-50%, -50%) scale(1.5); border-color: var(--text); z-index: 10; }
+  .scatter-point.exempt { background: var(--green); }
+  .scatter-point.partial { background: var(--orange); }
+  .scatter-point.taxable { background: var(--red); }
+  .scatter-point.mixed { background: var(--purple); }
+  .point-label { position: absolute; font-size: 0.7rem; font-family: "SFMono-Regular", Consolas, monospace; color: var(--muted); white-space: nowrap; pointer-events: none; }
+  .tooltip { position: absolute; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; font-family: "SFMono-Regular", Consolas, monospace; background: var(--surface-2); border: 1px solid var(--border); color: var(--text); white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 20; }
+  .scatter-container:hover .tooltip { opacity: 1; }
+  .insights { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+  .insight-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; }
+  .insight-card .label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .insight-card .value { font-size: 1.25rem; font-weight: 700; margin: 0.25rem 0 0; font-family: "SFMono-Regular", Consolas, monospace; }
+  .insight-card .sub { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+  thead th { background: var(--surface-2); border-bottom: 2px solid var(--border); padding: 0.75rem 1rem; text-align: left; font-weight: 600; cursor: pointer; user-select: none; white-space: nowrap; }
+  thead th:hover { background: var(--border); }
+  thead th .sort-indicator { margin-left: 0.35rem; font-size: 0.75rem; opacity: 0.4; }
+  thead th.sorted-asc .sort-indicator { opacity: 1; }
+  thead th.sorted-desc .sort-indicator { opacity: 1; transform: rotate(180deg); }
+  tbody td { padding: 0.65rem 1rem; border-bottom: 1px solid var(--border); }
+  tbody tr:hover td { background: var(--surface-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  .ticker { font-family: "SFMono-Regular", Consolas, monospace; font-weight: 600; }
+  .issuer { color: var(--muted); }
+  .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+  .badge-exempt { background: rgba(76,175,80,0.1); color: var(--green); }
+  .badge-partial { background: rgba(255,152,0,0.1); color: var(--orange); }
+  .badge-taxable { background: rgba(229,57,51,0.1); color: var(--red); }
+  .badge-mixed { background: rgba(168,137,255,0.1); color: var(--purple); }
+  .ladder-bucket { background: var(--surface-2); border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem; }
+  .ladder-bucket h4 { font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem; }
+  .bucket-meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+  .meta-item .label { font-size: 0.7rem; color: var(--muted); }
+  .meta-item .val { font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.85rem; font-weight: 600; }
+  .footer { text-align: center; padding: 2rem 0; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.8rem; }
+  @media (max-width: 768px) { .container { padding: 1rem; } .controls { flex-direction: column; align-items: flex-start; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>TaxYield Pro</h1>
+    <p>After-Tax Yield Dashboard for Bond ETFs • 20 funds • Daily updates</p>
+  </header>
+
+  <div class="error-banner" id="errorBanner">
+    <div class="error-text" id="errorText"></div>
+  </div>
+
+  <div class="controls">
+    <div class="control-group">
+      <label for="stateRate">State Tax Rate:</label>
+      <input type="range" id="stateRate" min="0" max="13.3" step="0.1" value="5.0">
+      <span class="state-value" id="stateRateValue">5.0%</span>
+    </div>
+    <div class="mode-toggle">
+      <button class="mode-btn active" data-mode="scatter">Scatter Plot</button>
+      <button class="mode-btn" data-mode="table">Table</button>
+      <button class="mode-btn" data-mode="ladder">Duration Ladder</button>
+    </div>
+    <button class="export-btn" id="exportBtn">Export CSV</button>
+    <button class="refresh-btn" id="refreshBtn">Refresh Data</button>
+    <span class="status-badge" id="statusBadge"><span class="status-dot" id="statusDot"></span> <span id="statusText">Loading…</span></span>
+  </div>
+
+  <div class="insights" id="insights"></div>
+
+  <div class="chart-card" id="scatterCard">
+    <h3>Yield vs Duration</h3>
+    <div class="scatter-container" id="scatterPlot"></div>
+  </div>
+
+  <div class="chart-card" id="tableCard" style="display:none;">
+    <h3>Fund Comparison</h3>
+    <table id="yieldTable">
+      <thead>
+        <tr>
+          <th data-key="ticker" data-type="string">Ticker ▼</th>
+          <th data-key="issuer" data-type="string">Issuer</th>
+          <th data-key="statedYield" data-type="number">Stated Yield</th>
+          <th data-key="afterTax" data-type="number">After-Tax</th>
+          <th data-key="taxSavings" data-type="number">Tax Savings</th>
+          <th data-key="duration" data-type="number">Duration</th>
+          <th data-key="stateTax" data-type="string">State Tax</th>
+          <th data-key="asOf" data-type="string">As Of</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+
+  <div class="chart-card" id="ladderCard" style="display:none;">
+    <h3>Duration Ladder</h3>
+    <div id="ladderBuckets"></div>
+  </div>
+
+  <div class="footer">
+    <p>© 2026 TaxYield Pro. Not investment advice. Past performance does not guarantee future results.</p>
+  </div>
+</div>
+
+<script>
+  // ===== DATA =====
+  const FALLBACK_FUNDS = [
+    { ticker: "BOXX", issuer: "Alpha Architect", statedYield: 4.13, duration: 0.1, stateTax: "Taxable", exemptPct: 0.0, asOf: "2026-07-16", source: "https://funds.alphaarchitect.com/boxetf/" },
+    { ticker: "USFR", issuer: "WisdomTree", statedYield: 3.84, duration: 0.0, stateTax: "Exempt", exemptPct: 1.0, asOf: "2026-07-25", source: "https://www.wisdomtree.com" },
+    { ticker: "SGOV", issuer: "iShares", statedYield: 3.85, duration: 0.1, stateTax: "Exempt", exemptPct: 1.0, asOf: "2026-07-25", source: "https://www.ishares.com/us/products/314116" },
+    { ticker: "GBIL", issuer: "Goldman Sachs", statedYield: 3.73, duration: 0.5, stateTax: "Exempt", exemptPct: 1.0, asOf: "2026-07-25", source: "https://www.goldmansachs.com" },
+    { ticker: "XONE", issuer: "BondBloxx", statedYield: 4.05, duration: 0.94, stateTax: "Exempt", exemptPct: 1.0, asOf: "2026-07-25", source: "https://bondbloxxetf.com" },
+    { ticker: "XTWO", issuer: "BondBloxx", statedYield: 4.04, duration: 2.0, stateTax: "Exempt", exemptPct: 1.0, asOf: "2026-07-25", source: "https://bondbloxxetf.com" },
+    { ticker: "TYLD", issuer: "Cambria", statedYield: 3.74, duration: 3.0, stateTax: "Taxable", exemptPct: 0.0, asOf: "2026-07-25", source: "https://www.cambriafunds.com" },
+    { ticker: "XTRE", issuer: "BondBloxx", statedYield: 4.0, duration: 3.0, stateTax: "Exempt", exemptPct: 1.0, asOf: "2026-07-25", source: "https://bondbloxxetf.com" },
+    { ticker: "FPA", issuer: "FPA", statedYield: 3.4, duration: 4.12, stateTax: "Exempt", exemptPct: 1.0, asOf: "2026-07-25", source: "https://fpa.com" },
+    { ticker: "XFIV", issuer: "BondBloxx", statedYield: 3.8, duration: 5.0, stateTax: "Exempt", exemptPct: 1.0, asOf: "2026-07-25", source: "https://bondbloxxetf.com" },
+    { ticker: "IEI", issuer: "iShares", statedYield: 3.63, duration: 5.0, stateTax: "Exempt", exemptPct: 1.0, asOf: "2026-07-25", source: "https://www.ishares.com" },
+    { ticker: "XSVN", issuer: "BondBloxx", statedYield: 4.08, duration: 7.0, stateTax: "Exempt", exemptPct: 1.0, asOf: "2026-07-25", source: "https://bondbloxxetf.com" },
+    { ticker: "AGG", issuer: "iShares", statedYield: 3.97, duration: 5.7, stateTax: "Exempt", exemptPct: 1.0, asOf: "2026-07-25", source: "https://www.ishares.com" },
+    { ticker: "HIDE", issuer: "Alpha Architect", statedYield: 3.01, duration: 3.0, stateTax: "Mixed", exemptPct: 0.5, asOf: "2026-07-25", source: "https://funds.alphaarchitect.com" },
+    { ticker: "XTEN", issuer: "BondBloxx", statedYield: 4.36, duration: 10.0, stateTax: "Exempt", exemptPct: 1.0, asOf: "2026-07-25", source: "https://bondbloxxetf.com" },
+    { ticker: "IBGB", issuer: "iShares", statedYield: 4.59, duration: 12.3, stateTax: "Exempt", exemptPct: 1.0, asOf: "2026-07-25", source: "https://www.ishares.com" },
+    { ticker: "TLT", issuer: "iShares", statedYield: 4.53, duration: 15.3, stateTax: "Exempt", exemptPct: 1.0, asOf: "2026-07-25", source: "https://www.ishares.com" },
+    { ticker: "ZROZ", issuer: "PIMCO", statedYield: 5.03, duration: 25.0, stateTax: "Exempt", exemptPct: 1.0, asOf: "2026-07-25", source: "https://www.pimco.com" }
+  ];
+  let funds = FALLBACK_FUNDS.map(f => ({ ...f }));
+  let fundsMeta = { source: "embedded", updatedAt: null };
+
+  let stateRate = 5.0;
+  let currentMode = "scatter";
+  let cache = null;
+  let cacheExpiry = 0;
+
+  // ===== DATA MANAGER =====
+  const dataManager = {
+    async fetchData() {
+      if (cache && Date.now() < cacheExpiry) return cache;
+
+      const sources = [
+        () => fetch("data/funds.json", { cache: "no-store" }).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); }),
+        () => fetch("./data/funds.json", { cache: "no-store" }).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); }),
+        () => fetch("/api/funds").then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); }),
+        () => {
+          const cached = localStorage.getItem("funds_cache");
+          if (cached) return JSON.parse(cached);
+          throw new Error("No cached data");
+        }
+      ];
+
+      for (const source of sources) {
+        try {
+          const data = await source();
+          const list = Array.isArray(data) ? data : (data && data.funds);
+          if (list && list.length > 0) {
+            cache = list;
+            cacheExpiry = Date.now() + 15 * 60 * 1000;
+            fundsMeta = {
+              source: "data/funds.json",
+              updatedAt: (!Array.isArray(data) && data.updatedAt) ? data.updatedAt : null
+            };
+            try {
+              localStorage.setItem("funds_cache", JSON.stringify({ funds: list, updatedAt: fundsMeta.updatedAt }));
+            } catch (e) {}
+            return list;
+          }
+        } catch (e) { continue; }
+      }
+      fundsMeta = { source: "embedded-fallback", updatedAt: null };
+      return FALLBACK_FUNDS.map(f => ({ ...f }));
+    }
+  };
+
+  // ===== TAX CALCULATION =====
+  function calculateAfterTax(statedYield, stateRate, exemptPct) {
+    const federalRate = 0.37;
+    return Math.max(statedYield * (1 - federalRate - stateRate / 100 * (1 - exemptPct)), 0);
+  }
+
+  function updateFunds() {
+    funds.forEach(f => {
+      f.afterTax = calculateAfterTax(f.statedYield, stateRate, f.exemptPct);
+      f.taxSavings = f.statedYield - f.afterTax;
+      f.isStale = (Date.now() - new Date(f.asOf)) / (1000 * 60 * 60 * 24) > 45;
+    });
+  }
+
+  // ===== INSIGHTS =====
+  function renderInsights() {
+    const avgYield = funds.reduce((s, f) => s + f.statedYield, 0) / funds.length;
+    const avgAfterTax = funds.reduce((s, f) => s + f.afterTax, 0) / funds.length;
+    const bestSavings = funds.reduce((max, f) => f.taxSavings > max.taxSavings ? f : max, funds[0]);
+    const bestAfterTax = funds.reduce((max, f) => f.afterTax > max.afterTax ? f : max, funds[0]);
+    const minDur = Math.min(...funds.map(f => f.duration));
+    const maxDur = Math.max(...funds.map(f => f.duration));
+    const exemptCount = funds.filter(f => f.stateTax === "Exempt").length;
+    const retention = (exemptCount / funds.length) * 100;
+
+    document.getElementById("insights").innerHTML = `
+      <div class="insight-card"><div class="label">Avg Stated Yield</div><div class="value">${avgYield.toFixed(2)}%</div></div>
+      <div class="insight-card"><div class="label">Avg After-Tax</div><div class="value">${avgAfterTax.toFixed(2)}%</div></div>
+      <div class="insight-card"><div class="label">Best Tax Savings</div><div class="value">${bestSavings.ticker}</div><div class="sub">${bestSavings.taxSavings.toFixed(2)}% saved</div></div>
+      <div class="insight-card"><div class="label">Best After-Tax</div><div class="value">${bestAfterTax.ticker}</div><div class="sub">${bestAfterTax.afterTax.toFixed(2)}% yield</div></div>
+      <div class="insight-card"><div class="label">Duration Range</div><div class="value">${minDur.toFixed(1)}-${maxDur.toFixed(1)}yr</div></div>
+      <div class="insight-card"><div class="label">Tax Efficiency</div><div class="value">${retention.toFixed(0)}%</div><div class="sub">exempt funds</div></div>
+    `;
+  }
+
+  // ===== SCATTER PLOT =====
+  function renderScatter() {
+    const plot = document.getElementById("scatterPlot");
+    plot.innerHTML = "";
+
+    const maxYield = Math.max(...funds.map(f => f.statedYield));
+    const maxDur = Math.max(...funds.map(f => f.duration));
+    const padding = 40;
+    const plotWidth = plot.clientWidth - padding * 2;
+    const plotHeight = plot.clientHeight - padding * 2;
+
+    // Grid lines
+    for (let i = 0; i <= 5; i++) {
+      const y = padding + (plotHeight / 5) * i;
+      const div = document.createElement("div");
+      div.className = "grid-line";
+      div.style.top = y + "px";
+      plot.appendChild(div);
+      const label = document.createElement("div");
+      label.className = "y-axis-label";
+      label.style.left = "5px";
+      label.style.top = (y - 8) + "px";
+      label.textContent = ((maxYield * (5 - i) / 5).toFixed(1)) + "%";
+      plot.appendChild(label);
+    }
+
+    // Axes
+    const yAxis = document.createElement("div");
+    yAxis.className = "y-axis-line";
+    yAxis.style.left = padding + "px";
+    plot.appendChild(yAxis);
+
+    const xAxis = document.createElement("div");
+    xAxis.className = "x-axis-line";
+    xAxis.style.bottom = padding + "px";
+    plot.appendChild(xAxis);
+
+    // X-axis labels
+    for (let i = 0; i <= 5; i++) {
+      const x = padding + (plotWidth / 5) * i;
+      const label = document.createElement("div");
+      label.className = "x-axis-label";
+      label.style.left = (x - 15) + "px";
+      label.style.bottom = "5px";
+      label.textContent = (maxDur * i / 5).toFixed(1) + "yr";
+      plot.appendChild(label);
+    }
+
+    // Points
+    funds.forEach(f => {
+      const xPct = (f.duration / maxDur) * 100;
+      const yPct = (f.statedYield / maxYield) * 100;
+      const x = padding + (plotWidth / 100) * xPct;
+      const y = padding + plotHeight - (plotHeight / 100) * yPct;
+
+      const point = document.createElement("div");
+      point.className = `scatter-point ${f.stateTax.toLowerCase().replace(" ", "-")}`;
+      point.style.left = x + "px";
+      point.style.top = y + "px";
+
+      const tooltip = document.createElement("div");
+      tooltip.className = "tooltip";
+      tooltip.innerHTML = `
+        <div>${f.ticker} (${f.issuer})</div>
+        <div>Stated: ${f.statedYield.toFixed(2)}%</div>
+        <div>After-Tax: ${f.afterTax.toFixed(2)}%</div>
+        <div>Duration: ${f.duration.toFixed(1)}yr</div>
+        <div>Tax: ${f.stateTax}</div>
+        <div>Savings: ${f.taxSavings.toFixed(2)}%</div>
+      `;
+      point.appendChild(tooltip);
+
+      point.addEventListener("click", () => {
+        alert(`${f.ticker} (${f.issuer})\nStated: ${f.statedYield.toFixed(2)}%\nAfter-Tax: ${f.afterTax.toFixed(2)}%\nDuration: ${f.duration.toFixed(1)}yr\nTax: ${f.stateTax}\nTax Savings: ${f.taxSavings.toFixed(2)}%`);
+      });
+
+      plot.appendChild(point);
+
+      const label = document.createElement("div");
+      label.className = "point-label";
+      label.style.left = (xPct + 2) + "%";
+      label.style.bottom = yPct + "%";
+      label.textContent = f.ticker;
+      plot.appendChild(label);
+    });
+  }
+
+  // ===== TABLE =====
+  function renderTable() {
+    const tbody = document.getElementById("tableBody");
+    tbody.innerHTML = "";
+    funds.forEach(f => {
+      const tr = document.createElement("tr");
+      const taxClass = f.stateTax === "Exempt" ? "badge-exempt" : f.stateTax === "Partial" ? "badge-partial" : f.stateTax === "Mixed" ? "badge-mixed" : "badge-taxable";
+      tr.style.opacity = f.isStale ? "0.5" : "1";
+      tr.innerHTML = `
+        <td class="ticker">${f.ticker}</td>
+        <td class="issuer">${f.issuer}</td>
+        <td>${f.statedYield.toFixed(2)}%</td>
+        <td>${f.afterTax.toFixed(2)}%</td>
+        <td>${f.taxSavings.toFixed(2)}%</td>
+        <td>${f.duration.toFixed(1)}</td>
+        <td><span class="badge ${taxClass}">${f.stateTax}</span></td>
+        <td>${f.asOf}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ===== LADDER =====
+  function renderLadder() {
+    const buckets = [
+      { name: "0-2 Year", range: "0-2yr", min: 0, max: 2 },
+      { name: "2-5 Year", range: "2-5yr", min: 2, max: 5 },
+      { name: "5-10 Year", range: "5-10yr", min: 5, max: 10 },
+      { name: "10+ Year", range: "10+yr", min: 10, max: 50 }
+    ];
+
+    let html = "";
+    buckets.forEach(b => {
+      const bucketFunds = funds.filter(f => f.duration >= b.min && f.duration < b.max);
+      if (bucketFunds.length === 0) return;
+
+      const avgYield = bucketFunds.reduce((s, f) => s + f.statedYield, 0) / bucketFunds.length;
+      const avgAfter = bucketFunds.reduce((s, f) => s + f.afterTax, 0) / bucketFunds.length;
+      const avgDur = bucketFunds.reduce((s, f) => s + f.duration, 0) / bucketFunds.length;
+      const tickers = bucketFunds.map(f => f.ticker).join(", ");
+
+      html += `
+        <div class="ladder-bucket">
+          <h4>${b.name} <span style="font-weight:400; color:var(--muted);">${b.range}</span></h4>
+          <div class="bucket-meta">
+            <div class="meta-item"><div class="label">Avg Yield</div><div class="val">${avgYield.toFixed(2)}%</div></div>
+            <div class="meta-item"><div class="label">Avg After-Tax</div><div class="val">${avgAfter.toFixed(2)}%</div></div>
+            <div class="meta-item"><div class="label">Avg Duration</div><div class="val">${avgDur.toFixed(1)}yr</div></div>
+            <div class="meta-item"><div class="label">Funds</div><div class="val">${bucketFunds.length}</div></div>
+            <div class="meta-item"><div class="label">Tickers</div><div class="val">${tickers}</div></div>
+          </div>
+        </div>
+      `;
+    });
+
+    document.getElementById("ladderBuckets").innerHTML = html;
+  }
+
+  // ===== RENDER =====
+  function render() {
+    updateFunds();
+    renderInsights();
+    if (currentMode === "scatter") {
+      renderScatter();
+      document.getElementById("scatterCard").style.display = "block";
+      document.getElementById("tableCard").style.display = "none";
+      document.getElementById("ladderCard").style.display = "none";
+    } else if (currentMode === "table") {
+      renderTable();
+      document.getElementById("scatterCard").style.display = "none";
+      document.getElementById("tableCard").style.display = "block";
+      document.getElementById("ladderCard").style.display = "none";
+    } else {
+      renderLadder();
+      document.getElementById("scatterCard").style.display = "none";
+      document.getElementById("tableCard").style.display = "none";
+      document.getElementById("ladderCard").style.display = "block";
+    }
+  }
+
+  // ===== EVENT LISTENERS =====
+  document.getElementById("stateRate").addEventListener("input", (e) => {
+    stateRate = parseFloat(e.target.value);
+    document.getElementById("stateRateValue").textContent = stateRate + "%";
+    render();
+  });
+
+  document.querySelectorAll(".mode-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentMode = btn.dataset.mode;
+      render();
+    });
+  });
+
+  document.getElementById("exportBtn").addEventListener("click", () => {
+    const csv = ["Ticker,Issuer,Stated Yield,After-Tax Yield,Tax Savings,Duration,State Tax,As Of"];
+    funds.forEach(f => {
+      csv.push(`${f.ticker},${f.issuer},${f.statedYield.toFixed(2)}%,${f.afterTax.toFixed(2)}%,${f.taxSavings.toFixed(2)}%,${f.duration.toFixed(1)},${f.stateTax},${f.asOf}`);
+    });
+    const blob = new Blob([csv.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "taxyield-pro.csv";
+    a.click();
+  });
+
+  document.getElementById("refreshBtn").addEventListener("click", async () => {
+    const btn = document.getElementById("refreshBtn");
+    btn.classList.add("loading");
+    btn.textContent = "Refreshing...";
+    try {
+      cache = null;
+      cacheExpiry = 0;
+      const data = await dataManager.fetchData();
+      funds = normalizeFundList(data);
+      setStatus(
+        fundsMeta.updatedAt
+          ? ("Book " + fundsMeta.updatedAt.slice(0, 10) + " · refreshed")
+          : ("Refreshed · " + funds.length + " funds"),
+        true
+      );
+      render();
+      showError("");
+    } catch (e) {
+      showError(`Data refresh failed: ${e.message}. Showing cached data.`);
+    } finally {
+      btn.classList.remove("loading");
+      btn.textContent = "Refresh Data";
+    }
+  });
+
+  function showError(message) {
+    const banner = document.getElementById("errorBanner");
+    const text = document.getElementById("errorText");
+    if (message) { text.textContent = message; banner.classList.add("visible"); }
+    else { banner.classList.remove("visible"); }
+  }
+
+  let sortState = {};
+  document.addEventListener("click", (e) => {
+    const th = e.target.closest("th[data-key]");
+    if (!th) return;
+    const key = th.getAttribute("data-key");
+    const type = th.getAttribute("data-type");
+    const current = sortState[key] || { dir: "asc" };
+    const newDir = current.dir === "asc" ? "desc" : "asc";
+    sortState[key] = { dir: newDir };
+    document.querySelectorAll("#yieldTable thead th").forEach(h => h.classList.remove("sorted-asc", "sorted-desc"));
+    th.classList.add(newDir === "asc" ? "sorted-asc" : "sorted-desc");
+    const sorted = [...funds].sort((a, b) => {
+      let av = a[key], bv = b[key];
+      if (type === "number") { av = parseFloat(av); bv = parseFloat(bv); }
+      if (av < bv) return newDir === "asc" ? -1 : 1;
+      if (av > bv) return newDir === "asc" ? 1 : -1;
+      return 0;
+    });
+    funds.length = 0;
+    funds.push(...sorted);
+    renderTable();
+  });
+
+  function setStatus(text, ok) {
+    const el = document.getElementById("statusText");
+    const dot = document.getElementById("statusDot");
+    if (el) el.textContent = text;
+    if (dot) {
+      dot.style.background = ok ? "var(--green)" : "var(--orange)";
+    }
+  }
+
+  function normalizeFundList(data) {
+    const list = Array.isArray(data) ? data : (data && data.funds) || [];
+    return list.map(f => ({
+      ticker: f.ticker,
+      issuer: f.issuer || "",
+      statedYield: Number(f.statedYield),
+      duration: Number(f.duration),
+      stateTax: f.stateTax || "Taxable",
+      exemptPct: Number(f.exemptPct ?? 0),
+      asOf: f.asOf || "",
+      source: f.source || ("https://finance.yahoo.com/quote/" + f.ticker),
+      price: f.price != null ? Number(f.price) : null,
+    }));
+  }
+
+  // ===== INIT =====
+  async function init() {
+    try {
+      const data = await dataManager.fetchData();
+      funds = normalizeFundList(data);
+      setStatus(
+        fundsMeta.updatedAt
+          ? ("Book " + fundsMeta.updatedAt.slice(0, 10) + " · " + funds.length + " funds")
+          : (fundsMeta.source + " · " + funds.length + " funds"),
+        fundsMeta.source !== "embedded-fallback"
+      );
+      showError("");
+      render();
+    } catch (e) {
+      funds = FALLBACK_FUNDS.map(f => ({ ...f }));
+      setStatus("Embedded fallback", false);
+      showError(`Failed to load data: ${e.message}. Showing embedded book.`);
+      render();
+    }
+    setInterval(async () => {
+      try {
+        cache = null;
+        cacheExpiry = 0;
+        const data = await dataManager.fetchData();
+        funds = normalizeFundList(data);
+        setStatus(
+          fundsMeta.updatedAt
+            ? ("Book " + fundsMeta.updatedAt.slice(0, 10) + " · refreshed")
+            : ("Refreshed · " + funds.length + " funds"),
+          true
+        );
+        render();
+      } catch (e) {}
+    }, 15 * 60 * 1000);
+  }
+  init();
+</script>
+</body>
+</html>
