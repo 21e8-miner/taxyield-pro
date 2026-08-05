@@ -1,0 +1,10 @@
+name = "taxyield-pro"
+main = "worker.js"
+compatibility_date = "2025-07-01"
+workers_dev = true
+
+# Point assets at repo root so Pages/Worker serve the same board.
+[assets]
+directory = ".."
+binding = "ASSETS"
+not_found_handling = "single-page-application"

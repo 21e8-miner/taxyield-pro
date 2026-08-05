@@ -205,7 +205,7 @@ class Handler(BaseHTTPRequestHandler):
                 {
                     "ok": True,
                     "status": "ok",
-                    "service": "taxyield-quotes",
+                    "service": "taxyield-pro",
                     "port": self.server.server_address[1],
                     "cache_size": n,
                     "cache_ttl_s": CACHE_TTL,
@@ -247,20 +247,6 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": "not found", "symbol": sym, "source": source}, status=404)
                 return
             self._json({"symbol": sym, "source": source, **q})
-            return
-
-        if path in ("/api/funds", "/funds"):
-            target = BASE_DIR / "data" / "funds.json"
-            if target.exists():
-                body = target.read_bytes()
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Content-Length", str(len(body)))
-                self._cors()
-                self.end_headers()
-                self.wfile.write(body)
-                return
-            self._json({"error": "funds.json missing"}, status=404)
             return
 
         # Static data (fund book JSON for Pages + local)
@@ -330,7 +316,7 @@ def main():
 
     url = f"http://127.0.0.1:{port}/"
     print("═" * 56)
-    print("  TAXYIELD PRO — quote backend")
+    print("  TaxYield Pro — quote backend")
     print(f"  board   {url}")
     print(f"  health  {url}api/health")
     print(f"  quotes  {url}api/quotes?symbols=SGOV,TLT,^TNX")

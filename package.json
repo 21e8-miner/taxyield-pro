@@ -1,0 +1,15 @@
+{
+  "name": "taxyield-pro",
+  "version": "2.0.0",
+  "private": true,
+  "description": "TaxYield Pro — after-tax yield vs duration desk (Bravias Financial)",
+  "scripts": {
+    "dev:edge": "wrangler dev --config edge/wrangler.toml",
+    "deploy:edge": "wrangler deploy --config edge/wrangler.toml",
+    "server": "python3 server.py",
+    "update": "python3 scripts/update_yields.py"
+  },
+  "devDependencies": {
+    "wrangler": "^4.118.0"
+  }
+}
