@@ -62,9 +62,14 @@ taxyield-pro/
 └── package.json               # wrangler scripts
 ```
 
-## Sibling repos
+## Sibling repos (archived)
 
-`fixed-income-dashboard` and `bravias-fi-desk` are superseded by this consolidation. Prefer **taxyield-pro** for new work.
+| Repo | Status |
+|------|--------|
+| [`fixed-income-dashboard`](https://github.com/21e8-miner/fixed-income-dashboard) | **Archived** — history only; README redirects here |
+| [`bravias-fi-desk`](https://github.com/21e8-miner/bravias-fi-desk) | **Archived** — history only; README redirects here |
+
+All new FI desk work lands in **this** repository.
 
 ## Disclaimer
 
